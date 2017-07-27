@@ -1,62 +1,47 @@
-:start_over
-MODE CON:cols=80 lines=40
-COLOR F0
-TITLE RoShamGlo Programming
-CLS
-@echo off
-echo.
+@ECHO OFF
 
-:auto delete folder from desktop if it exists
-:@echo off
-:rmdir /s /q "C:\Users\%username%\Desktop\uid"
+REM Parameters
+SET comnum=5
+SET hexfile=Firmware\Roshamglo_FW\roshamglo_7-25-17.hex
 
-:auto copy folder to desktop
-:@echo off
-:xcopy /s Firmware\Unique_Number_batch C:\Users\%username%\Desktop
+REM Set fuses
+avrdude -C avrdude.conf -c arduino -p t84 -P COM%comnum% -b 19200 -U lfuse:w:0xe2:m -U hfuse:w:0xdd:m -U efuse:w:0xfe:m
 
-:start
+REM Read fuses to verify
+::avrdude -C avrdude.conf -c arduino -p t84 -P COM%comnum% -b 19200 -U lfise:r:-:i -v
 
-TITLE RoShamGlo Programming
-CLS
+REM Flash .hex file
+avrdude -C avrdude.conf -c arduino -p t84 -P COM%comnum% -b 19200 -U flash:w:%hexfile%
 
-set $step1=Program Ro-Sham-Glo
-set step1=call "Firmware\Roshamglo_FW\PGM_Firmware_14107 - v20.bat"
+REM Calculate UID
+for /F "usebackq tokens=1,2 delims==" %%i in (`wmic os get LocalDateTime /VALUE 2^>NUL`) do if '.%%i.'=='.LocalDateTime.' set ldt=%%j
+set ldt=%ldt:~0,4%-%ldt:~4,2%-%ldt:~6,2%_%ldt:~8,2%:%ldt:~10,2%:%ldt:~12,6%
+echo Datetime: %ldt%
+for /F "delims=" %%i in ('Firmware\Unique_Number_batch\uid\md5.exe -d%ldt%') do set hash=%%i
+echo MD5 hash: %hash%
+set uid=%hash:~-6%
+set pre=0x
+set bone=%uid:~0,2%
+set btwo=%uid:~2,2%
+set bthree=%uid:~4,2%
+echo UID:      %uid%
+echo Byte_1:     %bone%
+echo Byte_2:     %btwo%
+echo Byte_3:     %bthree%
 
-set $step2=Program Unique Serial Number
-set step2=call "Firmware\Unique_Number_batch\uid\uid - v20.bat"
-Rem set step2=call "C:\Users\%username%\Desktop\uid\uid.bat"
+REM Flash EEPROM
 
+REM EEPROM Addresses
+REM 0x00 ID High
+REM 0x01 ID Mid
+REM 0x02 ID Low
+REM 0x03 Last played ID high
+REM 0x04 Last played ID mid
+REM 0x05 Last played ID low
+REM 0x06 Num times played last
+REM 0x07 Score
 
+avrdude -C avrdude.conf -c arduino -p t84 -P COM%comnum% -b 19200 -U eeprom:w:0x%bone%,0x%btwo%,0x%bthree%,0xFF,0xFF,0xFF,0x00,0x00:m
 
-:menu
-:print out all of the steps so you can see what you'd like to select...
-
-echo.
-echo.
-echo.
-echo 1=%$step1%
-echo 2=%$step2%
-echo 3=Loop all Programming
-echo.
-
-:set the parameter "step" to a number so we can use it later to call that step...
-set /p step=Type a number to select a step:
-
-if "%step%" == "1" (CLS & (echo %step1%) & %step1% & TIMEOUT 5)
-if "%step%" == "2" (CLS & (echo %step2%) & %step2% & TIMEOUT 5)
-if "%step%" == "3" goto loop
-
-CLS
-
-goto menu
-
-:loop
-%step1%
-%step2%
-
-echo.
-set /p step=Type ENTER to continue LOOP, or an "x" to exit:
-if "%step%" == "x" CLS & goto menu
-goto loop
-
-
+REM Read EEPROM to verify
+::avrdude -C avrdude.conf -c arduino -p t84 -P COM%comnum% -b 19200 -U eeprom:r:-:i
